@@ -122,9 +122,16 @@ function setCovStat!( K::SpelMat, x::Array{Float64,2}, covFunc, sigma::Float64 =
       K.U.nzval[ j ] = norm( x[ :, K.P[ i ] ] - x[ :, K.P[ K.U.rowval[ j ] ] ] )
     end
   end
-  #Creates an anonymous function representing the nugget
-  nugFunc = r -> (r==0.) * sigma + covFunc( r )
-  K.U.nzval .= map( nugFunc, K.U.nzval )
+  K.U.nzval .= map( covFunc, K.U.nzval )
+  if sigma != 0.
+    for i = 1 : K.N
+      for j = K.U.colptr[ i ] : ( K.U.colptr[ i + 1 ] - 1 )
+        if K.U.rowval[ j ] == i
+          K.U.nzval[ j ] += sigma 
+        end
+      end
+    end
+  end
   @time icholU_high_level!( K.U )
 end
 

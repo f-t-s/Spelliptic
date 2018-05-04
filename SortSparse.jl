@@ -49,9 +49,9 @@ function _moveDown!( h::Heap, hInd::Int64 )
   #If the both children exist:
   if 2 * hInd + 1 <= h.N 
     #If the left child is larger:
-    if h.nodes[ 2 * hInd ].dist2 > h.nodes[ 2 * hInd + 1 ].dist2 
+    if h.nodes[ 2 * hInd ].dist2 >= h.nodes[ 2 * hInd + 1 ].dist2 
       #Check if the Child is larger than the parent:
-      if h.nodes[2*hInd ].dist2 > dist2
+      if h.nodes[2*hInd ].dist2 >= dist2
         _swap!( h, hInd, 2 * hInd )
         return 2 * hInd
       else
@@ -61,7 +61,7 @@ function _moveDown!( h::Heap, hInd::Int64 )
     #If the left child is larger:
     else 
       #Check if the Child is larger than the parent:
-      if h.nodes[ 2*hInd + 1 ].dist2 > dist2
+      if h.nodes[ 2*hInd + 1 ].dist2 >= dist2
         _swap!( h, hInd, 2 * hInd + 1 )
         return 2 * hInd + 1
       else
@@ -161,84 +161,95 @@ function _determineChildren!( h::Heap,
 # ID:   
 #   The ID of the point, the children of which are being determined
 
+
   #caching the Id of the father node
   father::Int64 = parents[ ID ]
   #caching the point
   y::Array{Float64, 1} = x[ :, ID ]
   #adding the a new node to the dc
   newparent( dc, ID )
-  #cashing the ambient dimension
+  #storing the ambient dimension
   d::Int64 = size( x, 1 )  
+
+
   #caching the distance of the newest elemnt
   pivotDist2::Float64 = topDist2( h )
+
+  
   #We need to add the children to the new parent
   for index = dc.firstChildren[ dc.lookup[ father ] ]  : ( dc.firstChildren[ dc.lookup[ father ] + 1 ] - 1 )  
     j::Int64 = dc.children[ index ]
     dist2::Float64 = dist2eval( x, j , y, d )
 
-    if dist2 <= pivotDist2
+    if (dist2 <= pivotDist2)&&( h.nodes[ h.lookup[ j ] ].dist2 >= 0. )
       if dist2 < h.nodes[ h.lookup[ j ] ].dist2 
         update!( h, j, dist2 )
       end
       newson( dc, j )
-      if sqrt.( h.nodes[ h.lookup[ j ] ].dist2 ) .+ sqrt.( dist2 ) < sqrt.( pivotDist2 )
+      if sqrt.( h.nodes[ h.lookup[ j ] ].dist2 ) .+ sqrt.( dist2 ) <= sqrt.( pivotDist2 )
         parents[ j ] = ID
       end
     end
   end
+
+  #updating the newest element to distance -1, to indicate that it has been 
+  #included in the hierarchy already (important in case multiple measurements 
+  #have the same position
+  update!( h, ID, -1. )
+
+
 end
 
-function sortPoints( x::Array{Float64, 2}, boundDist::Array{Float64, 1} )
-#Function to sort the points in a multicscale way
-#Input:
-# x:
-#   A d times N array containing the measurement points
-  @assert unique(x, 2) == x "Remove duplicate points first"
-  Nbuffer0::Int64 = 10
-  N::Int64 = size( x, 2 )
-  parents::Array{Int64, 1} = Array{Int64, 1}(N)
-  #Create heap:
-  h::Heap = Heap( N, Array{HeapNode, 1}( N ), 1 : 1 : N )
-  for i = 1 : N 
-    h.nodes[ i ] = HeapNode( i, 1000000000000 )
-  end
-  #Create daycare
-  dc::Daycare = Daycare( 0, 0, Nbuffer0, Array{Int64, 1}(N), Array{Int64, 1}(N+1),  Array{Int64, 1}(Nbuffer0), Array{Int64, 1}(N)) 
-  #TODO remove ( only debugging )
-  dc.IdParents .= 0
-  dc.firstChildren .= 0
-  dc.children .= 0
-  dc.lookup .= 0
-  parents .= 0
-  #distances will contain as an i-th entry the distance upon elimination of the i-th
-  #degree of freedom
-  distances::Array{Float64} = zeros( N ) 
-
-
-  #Setting the first element:
-  #rootID::Int64 = randperm( N )[ 1 ]
-  rootID::Int64 = 1;
-  rootPoint::Array{Float64, 1} = x[ :, rootID ]
-  parents .= rootID
-  newparent( dc, rootID )
-  for i = 1 : N
-    newson( dc, i )
-    distances[1] = max( distances[1], sqrt.( dist2eval( x, i, rootPoint, size( x, 1 ) ) ) )
-    update!( h, i, dist2eval( x, i, rootPoint, size( x, 1 ) ) )
-  end
-
-  #updating the elements
-  for iter = 2 : N
-    pivotId::Int64 = topId( h )
-    distances[ iter ] = sqrt( topDist2( h ) )
-    _determineChildren!( h, dc, parents, x, pivotId )
-  end
-
-  #Output "P, revP, levels"
-  #Adding a vector with the distances, at which the 
-
-  return dc.IdParents, dc.lookup, distances
-end
+#function sortPoints( x::Array{Float64, 2}, boundDist::Array{Float64, 1} )
+##Function to sort the points in a multicscale way
+##Input:
+## x:
+##   A d times N array containing the measurement points
+#  Nbuffer0::Int64 = 10
+#  N::Int64 = size( x, 2 )
+#  parents::Array{Int64, 1} = Array{Int64, 1}(N)
+#  #Create heap:
+#  h::Heap = Heap( N, Array{HeapNode, 1}( N ), 1 : 1 : N )
+#  for i = 1 : N 
+#    h.nodes[ i ] = HeapNode( i, 1000000000000 )
+#  end
+#  #Create daycare
+#  dc::Daycare = Daycare( 0, 0, Nbuffer0, Array{Int64, 1}(N), Array{Int64, 1}(N+1),  Array{Int64, 1}(Nbuffer0), Array{Int64, 1}(N)) 
+#  #TODO remove ( only debugging )
+#  dc.IdParents .= 0
+#  dc.firstChildren .= 0
+#  dc.children .= 0
+#  dc.lookup .= 0
+#  parents .= 0
+#  #distances will contain as an i-th entry the distance upon elimination of the i-th
+#  #degree of freedom
+#  distances::Array{Float64} = zeros( N ) 
+#
+#
+#  #Setting the first element:
+#  #rootID::Int64 = randperm( N )[ 1 ]
+#  rootID::Int64 = 1;
+#  rootPoint::Array{Float64, 1} = x[ :, rootID ]
+#  parents .= rootID
+#  newparent( dc, rootID )
+#  for i = 1 : N
+#    newson( dc, i )
+#    distances[1] = max( distances[1], sqrt.( dist2eval( x, i, rootPoint, size( x, 1 ) ) ) )
+#    update!( h, i, dist2eval( x, i, rootPoint, size( x, 1 ) ) )
+#  end
+#
+#  #updating the elements
+#  for iter = 2 : N
+#    pivotId::Int64 = topId( h )
+#    distances[ iter ] = sqrt( topDist2( h ) )
+#    _determineChildren!( h, dc, parents, x, pivotId )
+#  end
+#
+#  #Output "P, revP, levels"
+#  #Adding a vector with the distances, at which the 
+#
+#  return dc.IdParents, dc.lookup, distances
+#end
 
 #Evaluates the distance of the point y in d-dimensional space to the jth point
 #of the point cloud x
@@ -269,7 +280,7 @@ function _determineChildren!( revP::Array{Int64, 1}, distances::Array{Float64, 1
     j::Int64 = dc.children[ index ]
     dist2::Float64 = dist2eval( x, j , y, d )
 
-    if ( revP[ ID ] <= revP[ j ] ) && ( dist2 < rho^2 * ( pivotDist.^2 ) )
+    if ( revP[ ID ] <= revP[ j ] ) && ( dist2 <= rho^2 * ( pivotDist.^2 ) )
       newson( dc, j )
       if sqrt.( dist2 ) + rho * distances[ revP[ j ] ] <= rho * pivotDist  
         parents[ j ] = ID
@@ -285,7 +296,6 @@ function sortPoints( x::Array{Float64, 2} )
 #Input:
 # x:
 #   A d times N array containing the measurement points
-  @assert unique(x, 2) == x "Remove duplicate points first"
   Nbuffer0::Int64 = 10
   N::Int64 = size( x, 2 )
   parents::Array{Int64, 1} = Array{Int64, 1}(N)
@@ -318,6 +328,7 @@ function sortPoints( x::Array{Float64, 2} )
     distances[1] = max( distances[1], sqrt.( dist2eval( x, i, rootPoint, size( x, 1 ) ) ) )
     update!( h, i, dist2eval( x, i, rootPoint, size( x, 1 ) ) )
   end
+  update!( h, rootID, -1. )
 
   #updating the elements
   for iter = 2 : N
@@ -328,7 +339,6 @@ function sortPoints( x::Array{Float64, 2} )
 
   #Output "P, revP, levels"
   #Adding a vector with the distances, at which the 
-
   return dc.IdParents, dc.lookup, distances
 end
 
@@ -362,7 +372,8 @@ function sparsityPattern( x::Array{Float64, 2}, P::Array{Int64, 1}, revP::Array{
   
   #Sort the jind according to their ordering:
   for i = 1 : N
-    dc.children[ dc.firstChildren[ i ] : ( dc.firstChildren[ i + 1 ] - 1 ) ] = P[ sort!( revP[ dc.children[ dc.firstChildren[ i ] : ( dc.firstChildren[ i + 1 ] - 1 ) ] ] ) ]
+    dc.children[ dc.firstChildren[ i ] : ( dc.firstChildren[ i + 1 ] - 1 ) ] = 
+      P[ sort!( revP[ dc.children[ dc.firstChildren[ i ] : ( dc.firstChildren[ i + 1 ] - 1 ) ] ] ) ]
   end
 
   return dc.firstChildren, revP[ dc.children[ 1 : dc.NChildren ] ]
