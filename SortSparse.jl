@@ -161,15 +161,16 @@ function sortSparse( N::Ti, rho::Tv, dist2Func, initInd = one(Ti) ) where
     parents[i] = Node{Tv,Ti}(sqrt(dist2Func(initInd,i)),i)
   end
 
-  for i = [(one(Ti) + one(Ti) ) : N ]
-    distances[i] = topNode(h).val
+  #TODO finish debugging below:
+  for i = (one(Ti) + one(Ti) ) : N 
+    @show distances[i] = topNode(h).val
     _determineChildren!(h,dc,parents,topNode(h),nodeBuffer,rho,dist2Func)
   end
 
   return dc.P, dc.revP, distances
 end
 
-function sortSparse( x::Array{Tv,2}, rho::Tv ) where Tv
+function sortSparse( x::Array{Tv,2}, rho::Tv, initInd = one(Ti) ) where Tv
   function dist2Func( i::Int64, j::Int64 )
     res::Tv = zero(Tv)
     for d = 1 : size(x,1)
@@ -177,7 +178,7 @@ function sortSparse( x::Array{Tv,2}, rho::Tv ) where Tv
     end
     return res
   end
-  return sortSparse( size(x,2), rho, dist2Func )
+  return sortSparse( size(x,2), rho, dist2Func, initInd )
 end
 
 

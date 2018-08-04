@@ -15,14 +15,14 @@ end
 
 #A function to swap two heapNodes in 
 function _swap!(h::MutHeap{Tv,Ti}, 
-                a::Node{Tv,Ti}, 
-                b::Node{Tv,Ti}) where {Tv,Ti}
+                a::Ti, 
+                b::Ti) where {Tv,Ti}
   #Assining the new values to the lookup table 
-  h.lookup[ a.id ] = b.id
-  h.lookup[ b.id ] = a.id
-  tempNode::Node{Tv,Ti} = a
-  a = b
-  b = tempNode
+  h.lookup[ h.nodes[a].id ] = b
+  h.lookup[ h.nodes[b].id ] = a
+  tempNode::Node{Tv,Ti} = h.nodes[a]
+  h.nodes[a] = h.nodes[b]
+  h.nodes[b] = tempNode
 end
 
 #Node comparisons
@@ -62,7 +62,7 @@ function _moveDown!( h::MutHeap{Tv,Ti}, hInd::Ti ) where {Tv,Ti}
     if h.nodes[2 * hInd] >= h.nodes[ 2 * hInd + 1]
       #Check if the child is larger than the parent:
       if h.nodes[2 * hInd] >= val
-        _swap!( h, h.nodes[hInd], h.nodes[2 * hInd] )
+        _swap!( h, hInd, 2 * hInd )
         return 2 * hInd
       else
         #No swap occuring:
@@ -72,7 +72,7 @@ function _moveDown!( h::MutHeap{Tv,Ti}, hInd::Ti ) where {Tv,Ti}
     else
       #Check if the Child is larger than the paren:
       if h.nodes[2 * hInd + 1] >= val
-        _swap!( h, h.nodes[hInd], h.nodes[2 * hInd + 1])
+        _swap!( h, hInd, 2 * hInd + 1 )
         return  2 * hInd + 1
       else
         #No swap occuring:
@@ -82,7 +82,7 @@ function _moveDown!( h::MutHeap{Tv,Ti}, hInd::Ti ) where {Tv,Ti}
     #If only one child exists:
   elseif 2 * hInd <= endof( h.nodes )
     if h.nodes[2 * hInd] > val
-      _swap!( h, h.nodes[hInd], h.nodes[2 * hInd])
+      _swap!( h, hInd, 2 * hInd )
       return 2 * hInd 
     end
   end
@@ -97,8 +97,8 @@ end
 
 #Updates (decreases) an element of the heap and restores the heap property
 function update!( h::MutHeap{Tv,Ti}, id::Ti, val::Tv ) where {Tv,Ti}
-  if h.nodes[id].val > val
-    tempInd::Ti = h.lookup[ id ]
+  tempInd::Ti = h.lookup[ id ]
+  if h.nodes[tempInd].val > val
     h.nodes[tempInd] = Node{Tv,Ti}(val,id)
     while ( tempInd < endof( h.nodes ) )
       tempInd = _moveDown!( h, tempInd )
