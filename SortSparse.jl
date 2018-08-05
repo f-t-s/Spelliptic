@@ -1,4 +1,5 @@
 include("./MutHeap.jl")
+using StaticArrays
 #############################################################################
 #Introducing the "daycare", which keeps track of the descendants of every node
 #The struct is essentially a buffered lower triangular CSC sparse matrix,
@@ -85,20 +86,18 @@ function _determineChildren!(h::MutHeap{Tv,Ti},
 #   i and j.
 
   #adding the new parent
-  newParent( dc, pivot.id )
-  dist2ToParent::Tv = parents[pivot.id].val
-  lenthscale = pivot.val
+  distToParent::Tv = parents[pivot.id].val
+  lengthscale = pivot.val
   iterBuffer::Ti = zero(Ti)
   for index = dc.colptr[dc.revP[parents[pivot.id].id]] : (dc.colptr[
                     dc.revP[parents[pivot.id].id] + one(Ti)] - one(Ti))
-  
     #The candidate point for the pivots children
-    candidate::Node{Tv,Ti} = dc.children[ index ]
+    candidate::Node{Tv,Ti} = dc.rowval[ index ]
     #Distance of the candidate to the pivot:
     dist2::Tv = dist2Func( candidate.id, pivot.id )
     #Check whether the candidate is close enough to be added as a child
-    if (revP[candidate.id] == zero(Ti)) dist2 <= (lengscale * rho)^2
-      dist = sqrt(dist2)
+    if (dc.revP[candidate.id] == zero(Ti)) && (dist2 <= (lengthscale * rho)^2)
+      dist = sqrt(max(dist2,zero(Tv)))
       #Step 1: We add a new child to the pivot:
       #Increase the count of added children by one
       iterBuffer += 1
@@ -107,18 +106,19 @@ function _determineChildren!(h::MutHeap{Tv,Ti},
       #Step 2: We possibly update the parent update the distance of the point 
       newDist = update!( h, candidate.id, dist )
       #Step 3: If possible and useful, update the preferred parent:
-      if (dist + rho * newDist <= rho * lengscale) && 
+      if (dist + rho * newDist <= rho * lengthscale) && 
          (dist < parents[candidate.id].val)  
-         parents[candidate.id] = Node{Tv,Ti}(dist,pivotId)
+         parents[candidate.id] = Node{Tv,Ti}(dist,pivot.id)
       end
     #If the candidate is far enough away from the pivots parent, such that it can
     #not possibly be within reach, break:
-    elseif (candidate.val - lengthscale * rho)^2 > dist2ToParent
+    elseif candidate.val > distToParent + lengthscale * rho
       break
     end
   end
   viewBuffer = view(buffer, 1 : iterBuffer)
   sort!(viewBuffer)
+  newParent( dc, pivot.id )
   newChildren(dc, viewBuffer)
 end
 
@@ -154,122 +154,32 @@ function sortSparse( N::Ti, rho::Tv, dist2Func, initInd = one(Ti) ) where
   distances[1] = typemax(Tv)
   for i = one(Ti) : N
     #adds a new Child and updates the corresponding distance of the child
-    newChild( dc, Node{Tv,Ti}(update!(h,i,sqrt(dist2Func(i,initInd))),i))
+    nodeBuffer[i] = Node{Tv,Ti}(update!(h,i,sqrt(max(dist2Func(i,initInd),zero(Tv)))),i ) 
   end
+  viewBuffer = view(nodeBuffer, 1 : N)
+  sort!(viewBuffer)
+  newChildren(dc, viewBuffer)
+
   parents::Array{Node{Tv,Ti},1} = Array{Node{Tv,Ti},1}(N)
   for i = one(Ti) : N
-    parents[i] = Node{Tv,Ti}(sqrt(dist2Func(initInd,i)),i)
+    parents[i] = Node{Tv,Ti}(sqrt(max(dist2Func(initInd,i),zero(Tv))),initInd)
   end
 
-  #TODO finish debugging below:
   for i = (one(Ti) + one(Ti) ) : N 
-    @show distances[i] = topNode(h).val
+    distances[i] = topNode(h).val
     _determineChildren!(h,dc,parents,topNode(h),nodeBuffer,rho,dist2Func)
   end
 
   return dc.P, dc.revP, distances
 end
 
-function sortSparse( x::Array{Tv,2}, rho::Tv, initInd = one(Ti) ) where Tv
-  function dist2Func( i::Int64, j::Int64 )
-    res::Tv = zero(Tv)
-    for d = 1 : size(x,1)
-      res += (x[d,i] - x[d,j])^2
-    end
-    return res
+function sortSparse( x::Array{Tv,2}, rho::Tv, initInd::Ti = one(Ti) ) where {Tv<:Real,Ti<:Integer}
+  #Recast as static arrays to use fast methods provided by StaticArrays.jl
+  #Possibly remove, doesn't seem to yield a lot.
+  const xM = reinterpret(SVector{size(x,1),Tv}, x, (size(x,2),))
+  function dist2Func( i::Ti, j::Ti )
+    return dot(xM[i],xM[i]) + dot(xM[j],xM[j]) - 2 * dot(xM[i],xM[j])
   end
   return sortSparse( size(x,2), rho, dist2Func, initInd )
 end
 
-
-
-##############################################################################
-##Implementation of the ordering algorithm
-##############################################################################
-#function sortPoints( x::Array{Float64, 2} )
-##Function to sort the points in a multicscale way
-##Input:
-## x:
-##   A d times N array containing the measurement points
-#  Nbuffer0::Int64 = 10
-#  N::Int64 = size( x, 2 )
-#  parents::Array{Int64, 1} = Array{Int64, 1}(N)
-#  #Create heap:
-#  h::Heap = Heap( N, Array{HeapNode, 1}( N ), 1 : 1 : N )
-#  for i = 1 : N 
-#    h.nodes[ i ] = HeapNode( i, 1000000000000 )
-#  end
-#  #Create daycare
-#  dc::Daycare = Daycare( 0, 0, Nbuffer0, Array{Int64, 1}(N), Array{Int64, 1}(N+1),  Array{Int64, 1}(Nbuffer0), Array{Int64, 1}(N)) 
-#  #TODO remove ( only debugging )
-#  dc.IdParents .= 0
-#  dc.firstChildren .= 0
-#  dc.children .= 0
-#  dc.lookup .= 0
-#  parents .= 0
-#  #distances will contain as an i-th entry the distance upon elimnation of the i-th
-#  #degree of freedom
-#  distances::Array{Float64} = zeros( N ) 
-#
-#
-#  #Setting the first element:
-#  #rootID::Int64 = randperm( N )[ 1 ]
-#  rootID::Int64 = 1;
-#  rootPoint::Array{Float64, 1} = x[ :, rootID ]
-#  parents .= rootID
-#  newParent( dc, rootID )
-#  for i = 1 : N
-#    newson( dc, i )
-#    distances[1] = max( distances[1], sqrt.( dist2eval( x, i, rootPoint, size( x, 1 ) ) ) )
-#    update!( h, i, dist2eval( x, i, rootPoint, size( x, 1 ) ) )
-#  end
-#  update!( h, rootID, -1. )
-#
-#  #updating the elements
-#  for iter = 2 : N
-#    pivotId::Int64 = topId( h )
-#    distances[ iter ] = sqrt( topDist2( h ) )
-#    _determineChildren!( h, dc, parents, x, pivotId )
-#  end
-#
-#  #Output "P, revP, levels"
-#  #Adding a vector with the distances, at which the 
-#  return dc.IdParents, dc.lookup, distances
-#end
-#
-##############################################################################
-##Implementation of the sparsity pattern
-##############################################################################
-#function sparsityPattern( x::Array{Float64, 2}, P::Array{Int64, 1}, revP::Array{Int64, 1}, distances::Array{Float64, 1}, rho::Float64 )
-#  d::Int64 = size( x, 1 )
-#  N::Int64 = size( x, 2 )
-#  Nbuffer0::Int64 = 10
-#
-#  parents::Array{Int64, 1} = Array{Int64, 1}(N)
-#  dc::Daycare = Daycare( 0, 0, Nbuffer0, Array{Int64, 1}(N), Array{Int64, 1}(N+1),  Array{Int64, 1}(Nbuffer0), Array{Int64, 1}(N)) 
-#
-#  dc.IdParents .= 0
-#  dc.firstChildren .= 0
-#  dc.children .= 0
-#  dc.lookup .= 0
-#  parents .= 0
-#
-#  parents .= P[ 1 ]
-#  newParent( dc, P[ 1 ] )
-#  for i = 1 : N
-#    newson( dc, i )
-#  end
-#
-#  for k = 2 : N
-#    _determineChildren!( revP, distances, dc, parents, x, P[ k ], rho)
-#  end
-#  
-#  #Sort the jind according to their ordering:
-#  for i = 1 : N
-#    dc.children[ dc.firstChildren[ i ] : ( dc.firstChildren[ i + 1 ] - 1 ) ] = 
-#      P[ sort!( revP[ dc.children[ dc.firstChildren[ i ] : ( dc.firstChildren[ i + 1 ] - 1 ) ] ] ) ]
-#  end
-#
-#  return dc.firstChildren, revP[ dc.children[ 1 : dc.NChildren ] ]
-#end
-#
