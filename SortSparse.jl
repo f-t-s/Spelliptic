@@ -170,16 +170,73 @@ function sortSparse( N::Ti, rho::Tv, dist2Func, initInd = one(Ti) ) where
     _determineChildren!(h,dc,parents,topNode(h),nodeBuffer,rho,dist2Func)
   end
 
-  return dc.P, dc.revP, distances
+  dc.rowval = dc.rowval[1:dc.colptr[end - one(Ti)]]
+
+  
+
+
+  return dc.colptr, dc.rowval, dc.P, dc.revP, distances
 end
 
-function sortSparse( x::Array{Tv,2}, rho::Tv, initInd::Ti = one(Ti) ) where {Tv<:Real,Ti<:Integer}
+function assignMembership(L::SparseMatrixCSC{Tv,Ti},
+                          distances::Array{Tv,1},
+                          l::Tv,
+                          minBin::Ti) where {Tv<:Real, Ti<:Integer}
+  membership::Array{Ti,1} = Array{Ti,1}(L.n)
+  tempDist::Array{Tv,1} = fill(typemax(Tv),L.n)
+
+  for colIter = 1 : L.n
+    for rowIter = L.colptr[colIter] : (L.colptr[colIter + 1] - 1)
+      j = colIter
+      i = L.rowval[rowIter]
+      val = L.nzval[rowIter]
+      if distances[j] >= l * distances[i]
+        if tempDist[i] > val
+          membership[i] = j
+          tempDist[i] = val
+        end
+      end
+    end
+  end
+  membership[one(Ti)] = one(Ti)
+  return membership
+end
+
+function sortSparse(x::Array{Tv,2},
+                    rho::Tv,
+                    initInd::Ti,
+                    l::Tv,
+                    minBin::Ti) where {Tv<:Real,Ti<:Integer}
+  N = size(x,2)
   #Recast as static arrays to use fast methods provided by StaticArrays.jl
   #Possibly remove, doesn't seem to yield a lot.
   const xM = reinterpret(SVector{size(x,1),Tv}, x, (size(x,2),))
   function dist2Func( i::Ti, j::Ti )
     return dot(xM[i],xM[i]) + dot(xM[j],xM[j]) - 2 * dot(xM[i],xM[j])
   end
-  return sortSparse( size(x,2), rho, dist2Func, initInd )
+
+  colptr, rowval, P, revP, distances = 
+    sortSparse( N, rho, dist2Func, initInd )
+
+
+
+
+
+  #TODO For now, the minbin is realised in a approximate way by updating the 
+  #right characteristing length-scales.
+  #Only act if findfirst doesn't return 0
+  firstLonely::Ti = findfirst( diff( colptr ) .<= minBin )
+  if firstLonely > zero(Ti) 
+    distances[firstLonely:end] .= distances[firstLonely - one(Ti)]
+  end
+
+  L = SparseMatrixCSC{Tv,Ti}(N, N, colptr, 
+                             revP[getfield.(rowval, :id)],
+                             getfield.(rowval, :val) )
+  membership::Array{Ti,1} = assignMembership( L, distances, l, minBin )
+  #removing the infinity of the first distances part
+  distances[one(Ti)] = distances[one(Ti) + one(Ti)]
+
+  return colptr, rowval, P, revP, distances, membership
 end
 
