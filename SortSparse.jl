@@ -171,6 +171,10 @@ function sortSparse( N::Ti, rho::Tv, dist2Func, initInd = one(Ti) ) where
   end
 
   dc.rowval = dc.rowval[1:dc.colptr[end - one(Ti)]]
+  
+  for k = one(Ti) : size( dc.rowval,1 ) 
+    dc.rowval[k] = Node{Tv,Ti}( dc.rowval[k].val, dc.revP[dc.rowval[k].id] )
+  end
 
   return dc.colptr, dc.rowval, dc.P, dc.revP, distances
 end

@@ -24,14 +24,14 @@ include("MutHeap.jl")
 #end
 
 
-function superNodes(colptr::Array{Ti,1},
-                    rowval::Array{Node{Tv,Ti},1},
-                    P::Array{Ti,1},
-                    revP::Array{Ti,1},
-                    distances::Array{Tv,1},
-                    l::Tv,
-                    h::Tv,
-                    minBin::Ti) where {Tv<:Real,Ti<:Integer}
+function superNodalOrder(colptr::Array{Ti,1},
+                         rowval::Array{Node{Tv,Ti},1},
+                         P::Array{Ti,1},
+                         revP::Array{Ti,1},
+                         distances::Array{Tv,1},
+                         l::Tv,
+                         h::Tv,
+                         minBin::Ti) where {Tv<:Real,Ti<:Integer}
   #Number of nodes:
   N = size(P,1)
   #Define a helper function that turns a given distance into the 
@@ -58,7 +58,7 @@ function superNodes(colptr::Array{Ti,1},
     for rowIter = colptr[colIter] : (colptr[colIter + 1] - 1)
       #The node with index j is a father of the node with index i.
       j = colIter
-      i = revP[ rowval[rowIter].id ]
+      i = rowval[rowIter].id 
       val = rowval[rowIter].val
       #If the node with index j is coarse enough to "fit" index i and it's local
       #neighborhood, it is being considered as a possible cluster.
@@ -97,9 +97,11 @@ function superNodes(colptr::Array{Ti,1},
       #if newk > _dist_to_level( l * distances[newInd] )
       if newk > 1
         newk -= one(Ti)
-      else
+      elseif newInd > 1
         newk = member_ship[1, newInd ]
         newInd = member_ship[2,newInd]
+      else
+        break
       end
     end
     #decreasing the member_count at the old location by one
@@ -112,61 +114,71 @@ function superNodes(colptr::Array{Ti,1},
   end
 
   #Sorting the elements by cluster, from large distance to small distance
-  P_sup_elem = sortcols( vcat( member_ship, (one(Ti) : N)' ) )[3,:]
-  
   NBin = count( member_count .!= zero(Ti) )
   member_count_lin = cumsum( vcat( 0, vec(member_count)[ find(member_count) ]
                                   )).+ one(Ti)  
   P_sup = Array{SubArray{Ti,1,Array{Ti,1},Tuple{UnitRange{Ti}},true},1}(NBin)
-  revP_sup = fill( Array{Ti,1}(2), N )
+  revP_sup = Array{Ti, 2}(N,2)
+  P_sup_elem = P[sortcols( vcat( member_ship, (one(Ti) : N)' ) )[3,:]]
   for k = 1 : NBin
     P_sup[k] = view(P_sup_elem, member_count_lin[k] : (member_count_lin[k+1] - 1 )
                 )
     for j = member_count_lin[k] : (member_count_lin[k+1] - 1 )
-      (revP_sup[j])[1] = k 
-      (revP_sup[j])[2] = j - member_count_lin[k] + 1 
+      revP_sup[j,1] = k 
+      revP_sup[j,2] = j - member_count_lin[k] + 1 
     end
   end
 
-  return P_sup, revP_sup, P_sup_elem
+  return P_sup, revP_sup, P_sup_elem, member_count_lin
 end
 
+function superNodalPattern( P_sup::Array{SubArray{Ti,1,Array{Ti,1},
+                                    Tuple{UnitRange{Ti}},true},1},
+                            revP_sup::Array{Ti,2}, 
+                            member_count_lin::Array{Ti,1},
+                            colptr::Array{Ti,1},
+                            rowval::Array{Ti,1} ) where {Ti}
+N_sup::Ti = size( P_sup, 1 )
+N::Ti = size( colptr, 1 ) - one(Ti)
 
-#function sortSparse(x::Array{Tv,2},
-#                    rho::Tv,
-#                    initInd::Ti,
-#                    l::Tv,
-#                    minBin::Ti) where {Tv<:Real,Ti<:Integer}
-#  N = size(x,2)
-#  #Recast as static arrays to use fast methods provided by StaticArrays.jl
-#  #Possibly remove, doesn't seem to yield a lot.
-#  const xM = reinterpret(SVector{size(x,1),Tv}, x, (size(x,2),))
-#  function dist2Func( i::Ti, j::Ti )
-#    return dot(xM[i],xM[i]) + dot(xM[j],xM[j]) - 2 * dot(xM[i],xM[j])
+
+#TODO Can be made much more memory efficientby writing for loops. 
+L::SparseMatrixCSC{Bool,Ti} = SparseMatrixCSC{Bool,Ti}( N, N, colptr, rowval,
+                             fill(true, size( rowval, 1) ) )
+  
+
+  I::Array{Ti,1}, J::Array{Ti,1} = findn( L )   
+  #Deallocating rowval
+  #rowval = [rowval[1]]
+  gc()
+  IJ = unique(revP_sup[ hcat( I,J ),1],2)
+  L = sparse([true])
+  I = [zero(Ti)]
+  J = [zero(Ti)]
+  gc()
+
+  I = IJ[:,1]
+  J = IJ[:,2]
+  gc()
+  U_sup::SparseMatrixCSC{Bool,Ti} = sparse( I, J, fill(true, size( I, 1 ) ) )
+  I = [zero(Ti)]
+  J = [zero(Ti)]
+  gc()
+  U_sup = triu( U_sup .| U_sup' )
+
+  #We have now constructed the sparsity pattern. As the next step, we want to
+  #construct the sparser matrix with view entries.
+#  nnz =  Array{SubArray{Ti,1,Array{Tv,2},Tuple{Colon,UnitRange{Ti}},true},1}
+#
+#  matArray = Array{Array{Tv,2}, 1}(N_sup)
+#  
+#
+#  for k = 1 : N_sup
+#    matArray[k] = Array{}
+#    k
 #  end
-#
-#  colptr, rowval, P, revP, distances = 
-#    sortSparse( N, rho, dist2Func, initInd )
-#
-#
-#
-#
-#
-#  #TODO For now, the minbin is realised in a approximate way by updating the 
-#  #right characteristing length-scales.
-#  #Only act if findfirst doesn't return 0
-#  firstLonely::Ti = findfirst( diff( colptr ) .<= minBin )
-#  if firstLonely > zero(Ti) 
-#    distances[firstLonely:end] .= distances[firstLonely - one(Ti)]
-#  end
-#
-#  L = SparseMatrixCSC{Tv,Ti}(N, N, colptr, 
-#                             revP[getfield.(rowval, :id)],
-#                             getfield.(rowval, :val) )
-#  membership::Array{Ti,1} = assignMembership( L, distances, l, minBin )
-#  #removing the infinity of the first distances part
-#  distances[one(Ti)] = distances[one(Ti) + one(Ti)]
-#
-#  return colptr, rowval, P, revP, distances, membership
-#end
-#
+
+
+  return U_sup
+end
+
