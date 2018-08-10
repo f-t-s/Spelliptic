@@ -53,11 +53,11 @@ end
 
 #Function that looks at element h.nodes[hInd] and moves it down the tree 
 #if it is sufficiently small. Returns the new index if a move took place, 
-#and endof(h.nodes), else
+#and lastindex(h.nodes), else
 function _moveDown!( h::MutHeap{Tv,Ti}, hInd::Ti ) where {Tv,Ti}
   val::Tv = h.nodes[hInd].val
   #If both children exist:
-  if 2 * hInd + 1 <= endof( h.nodes )
+  if 2 * hInd + 1 <= lastindex( h.nodes )
     #If the left child is larger:
     if h.nodes[2 * hInd] >= h.nodes[ 2 * hInd + 1]
       #Check if the child is larger than the parent:
@@ -66,7 +66,7 @@ function _moveDown!( h::MutHeap{Tv,Ti}, hInd::Ti ) where {Tv,Ti}
         return 2 * hInd
       else
         #No swap occuring:
-        return endof( h.nodes )
+        return lastindex( h.nodes )
       end
     #If the left child is larger:
     else
@@ -76,18 +76,18 @@ function _moveDown!( h::MutHeap{Tv,Ti}, hInd::Ti ) where {Tv,Ti}
         return  2 * hInd + 1
       else
         #No swap occuring:
-        return endof( h.nodes )
+        return lastindex( h.nodes )
       end
     end
     #If only one child exists:
-  elseif 2 * hInd <= endof( h.nodes )
+  elseif 2 * hInd <= lastindex( h.nodes )
     if h.nodes[2 * hInd] > val
       _swap!( h, hInd, 2 * hInd )
       return 2 * hInd 
     end
   end
   #No swap occuring:
-  return endof( h.nodes )
+  return lastindex( h.nodes )
 end
 
 #Get the leading node
@@ -100,7 +100,7 @@ function update!( h::MutHeap{Tv,Ti}, id::Ti, val::Tv ) where {Tv,Ti}
   tempInd::Ti = h.lookup[ id ]
   if h.nodes[tempInd].val > val
     h.nodes[tempInd] = Node{Tv,Ti}(val,id)
-    while ( tempInd < endof( h.nodes ) )
+    while ( tempInd < lastindex( h.nodes ) )
       tempInd = _moveDown!( h, tempInd )
     end
     return val

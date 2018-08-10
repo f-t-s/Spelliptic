@@ -125,7 +125,7 @@ end
 function sortSparse( N::Ti, rho::Tv, dist2Func, initInd = one(Ti) ) where 
                     {Ti<:Integer, Tv<:Real}
   #Constructing the heap and initialising all variables have maximal distance
-  h::MutHeap{Tv,Ti} = MutHeap{Tv,Ti}( Array{Node{Tv,Ti},1}(N), 
+  h::MutHeap{Tv,Ti} = MutHeap{Tv,Ti}( Array{Node{Tv,Ti},1}(undef, N), 
                                       one(Ti) : N )
   for i = one(Ti) : N
     h.nodes[i] = Node(typemax(Tv), i)
@@ -142,7 +142,7 @@ function sortSparse( N::Ti, rho::Tv, dist2Func, initInd = one(Ti) ) where
                         fill(Node{Tv,Ti}(zero(Tv),zero(Ti)), N))
 
   #Initializing the Buffer used by _determineChildren!
-  nodeBuffer::Array{Node{Tv,Ti},1} = Array{Node{Tv,Ti},1}(N)
+  nodeBuffer::Array{Node{Tv,Ti},1} = Array{Node{Tv,Ti},1}(undef, N)
 
   #Initializing the array that will hold the distances measured in the end
   distances::Array{Tv,1} = - ones( Tv, N )
@@ -160,7 +160,7 @@ function sortSparse( N::Ti, rho::Tv, dist2Func, initInd = one(Ti) ) where
   sort!(viewBuffer)
   newChildren(dc, viewBuffer)
 
-  parents::Array{Node{Tv,Ti},1} = Array{Node{Tv,Ti},1}(N)
+  parents::Array{Node{Tv,Ti},1} = Array{Node{Tv,Ti},1}(undef, N)
   for i = one(Ti) : N
     parents[i] = Node{Tv,Ti}(sqrt(max(dist2Func(initInd,i),zero(Tv))),initInd)
   end
@@ -186,7 +186,7 @@ function sortSparse(x::Array{Tv,2},
   N = size(x,2)
   #Recast as static arrays to use fast methods provided by StaticArrays.jl
   #Possibly remove, doesn't seem to yield a lot.
-  const xM = reinterpret(SVector{size(x,1),Tv}, x, (size(x,2),))
+  xM = reshape( reinterpret(SVector{size(x,1),Tv}, vec(x)), N )
   function dist2Func( i::Ti, j::Ti )
     return dot(xM[i],xM[i]) + dot(xM[j],xM[j]) - 2 * dot(xM[i],xM[j])
   end
