@@ -359,7 +359,6 @@ function IChol!( U::BlockSparseMatrixCSC{Tv,Ti} ) where{Tv, Ti<:Integer}
 #  b = view(U.rowval, U.colptr[1] : (U.colptr[1+1] - 1) )
 #  c = view(U.nzval, U.colptr[1] : (U.colptr[1+1] - 1) )
 #  d = view(U.rowval, U.colptr[1] : (U.colptr[1+1] - 1) )
-
   for j = 1 : U.n
 #    u_nz = view(U.nzval, U.colptr[j] :  (U.colptr[j+1] - 1) )
 #    u_rv = view(U.rowval, U.colptr[j] : (U.colptr[j+1] - 1) )
@@ -371,18 +370,13 @@ function IChol!( U::BlockSparseMatrixCSC{Tv,Ti} ) where{Tv, Ti<:Integer}
        _updateElem_IChol!(U.nzval[i_ind], U.nzval, U.rowval,  
                           U.colptr[i], U.colptr[i+1] - 2,
                           U.colptr[j], U.colptr[j+1] - 2)
-
-
 #@time       _updateElem_IChol!(U.nzval[i_ind], u_nz, u_rv, v_nz, v_rv )
-
-
       #Updating the element at question
 #      _updateElem_IChol!(U.nzval[i_ind], 
 #                         view(U.nzval, U.colptr[j] :  (U.colptr[j+1] - 1) ),
 #                         view(U.rowval, U.colptr[j] : (U.colptr[j+1] - 1) ),
 #                         view(U.nzval, U.colptr[i] : (U.colptr[i+1] - 1) ),
 #                         view(U.rowval, U.colptr[i] : (U.colptr[i+1] - 1) ))
-
                          
       #Treating the off-diagonal case, by normalising the nonzero with the 
       #corresponding lower triangular part.
@@ -414,6 +408,35 @@ function elementUpdate!(A::ColSubArray{Tv,Ti},
   end
 end
 
+#TODO: finish the the program for testing of accuracy (and the supernodal 
+#sparser Cholesky.
+function testAccuracy(U_sup::BlockSparseMatrixCSC{Tv,Ti}, 
+                      revP_sup::Array{Ti,2},
+                      x::Array{Tv,2}, 
+                      covFunc,
+                      nSamples::Ti) where {Tv,Ti}
+  N = size(x,2)
+  #Recast as static arrays to use fast methods provided by StaticArrays.jl
+  #Possibly remove, doesn't seem to yield a lot.
+  xM = reshape( reinterpret(SVector{size(x,1),Tv}, vec(x)), N )
+  function entryFunc( i::Ti, j::Ti )
+    return covFunc(dot(xM[i],xM[i]) + dot(xM[j],xM[j]) - 2 * dot(xM[i],xM[j]))
+  end
+  samplesIJ = hcat(randperm(U_sup.n)[1:nSamples], 
+                   randperm(U_sup.n)[1:nSamples])   
+
+  trueVals = Array{Tv,1}(undef, nSamples)
+  appVals = Array{Tv,1}(undef, nSamples)
+  distVals = Array{Tv,1}(undef, nSamples)
+  errVals = Array{Tv,1}(undef, nSamples)
 
 
+  ind_sup = revP_sup[samplesIJ[:,1],1] 
+  ind_elem = revP_sup[samplesIJ[:,1],2] 
+  jnd_sup = revP_sup[samplesIJ[:,2],1] 
+  jnd_elem = revP_sup[samplesIJ[:,2],2] 
 
+  for k = 1 : nSamples 
+
+  end
+end
